@@ -1,0 +1,1084 @@
+---
+title: "L&T PxV Measurement invariance"
+author: "John Flournoy"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+**NOTE** Need to examine all MIs for strict model and drop items accordingly.
+
+```{r echo=F, results='hide', warning=F, message=F}
+knitr::opts_chunk$set(echo = F)
+devtools::install_github('jflournoy/milav')
+library(milav)
+library(future)
+library(lavaan)
+if(grepl('(^n\\d|talapas-ln1)', system('hostname', intern = T))){
+  nworkers <- 28
+  data_dir <- '/home/flournoy/otherhome/data/lnt_pxvx'
+  plan(tweak(multiprocess, gc = T, workers = nworkers))
+} else {
+  nworkers <- future::availableCores() - 1
+  data_dir <- '/data/jflournoy/lnt_pxvx/'
+  niter <- 2
+  plan(tweak(multiprocess, gc = T, workers = nworkers))
+}
+message('Workers: ', nworkers)
+
+if(!dir.exists(data_dir)){
+  dir.create(data_dir)
+}
+
+remove_sids <- c(2440,
+                 2509,
+                 2515,
+                 2519,
+                 3161,
+                 3441,
+                 3659,
+                 3764,
+                 3819,
+                 3883)
+
+suppressMessages(library('tidyverse'))
+lnt_df <- haven::read_sav(file.path(data_dir, 'LT_wideAGT1234.sav'))
+lnt_df_nat <- dplyr::filter(lnt_df, aSubsample == 1)  %>%
+  filter(!subjid %in% remove_sids)
+
+create_scoring_frame <- function(items, rev_pattern = '.*x$', 
+                                 sub_pattern = '^[abcd](.*?)x*$', 
+                                 sub_replacement = '\\1',
+                                 factor_name = NULL){
+  scoring_vec <- -2*as.numeric(grepl(rev_pattern, items))+1
+  new_items <- gsub(pattern = sub_pattern, replacement = sub_replacement, items)
+  scoring_df <- data.frame(item = new_items, scoring = scoring_vec,
+                           stringsAsFactors = FALSE)
+  if(!is.null(factor_name)){
+    scoring_df$factor_name <- factor_name
+  }
+  return(scoring_df)
+}
+
+#Some regex help munging the code from SPSS
+# (\wbfi\d+x*)(?:\W+\+\W*)*
+# '\1'
+#
+# compute (\w+) = 100\*\(mean(\(.*?\)) - 1\) */ *\d\. 
+# \1 <- create_scoring_frame(\n  c\2\n  factor_name = '\1')
+#
+# val_cols <- c('aspfin',
+#               'BFA_MT',
+#               'HRZ_COL',
+#               'HRZ_IND',
+#               'MVI_POMP',
+#               'USI',
+#               'VRT_COL',
+#               'VRT_IND')
+
+
+
+lnt_scales_list <- list(
+  bfi_s_scale = create_scoring_frame(
+    c('abfi32', 'abfi7', 'abfi42', 'abfi33', 'abfi13', 'abfi51', 'abfi37x',
+      'abfi8x', 'abfi2x', 'abfi12x', 'abfi47x', 'abfi49x'),
+    factor_name = 'bfi_s_scale'),
+  bfi_d_scale = create_scoring_frame(
+    c('abfi26', 'abfi36', 'abfi16', 'abfi31x', 'abfi11', 'abfi5', 'abfi25', 'abfi20', 'abfi39x'),
+    factor_name = 'bfi_d_scale'),
+  bfi_hp8 = create_scoring_frame(
+    c('abfi45x', 'abfi46x', 'abfi47x', 'abfi48x', 'abfi49x', 'abfi50', 'abfi51', 'abfi52'), 
+    factor_name = 'bfi_hp8'),
+  bfi_c = create_scoring_frame(
+    c('abfi3', 'abfi8x', 'abfi13', 'abfi18x', 'abfi23x', 'abfi28', 'abfi33', 'abfi38', 'abfi43x'), 
+    factor_name = 'bfi_c'),
+  bfi_a = create_scoring_frame(
+    c('abfi2x', 'abfi7', 'abfi12x', 'abfi17', 'abfi22', 'abfi27x', 'abfi32', 'abfi37x', 'abfi42'), 
+    factor_name = 'bfi_a'),
+  bfi_a6 = create_scoring_frame(
+    c('abfi55', 'abfi56', 'abfi57', 'abfi58x', 'abfi59x', 'abfi60x', 'abfi61x', 'abfi62x'), 
+    factor_name = 'bfi_a6'),
+  bfi_e = create_scoring_frame(
+    c('abfi1', 'abfi6x', 'abfi11', 'abfi16', 'abfi21x', 'abfi26', 'abfi31x', 'abfi36'), 
+    factor_name = 'bfi_e'),
+  bfi_n = create_scoring_frame(
+    c('abfi4', 'abfi9x', 'abfi14', 'abfi19', 'abfi24x', 'abfi29', 'abfi34x', 'abfi39'), 
+    factor_name = 'bfi_n'),
+  bfi_o = create_scoring_frame(
+    c('abfi5', 'abfi10', 'abfi15', 'abfi20', 'abfi25', 'abfi30', 'abfi35x', 'abfi40', 'abfi41x', 'abfi44'), 
+    factor_name = 'bfi_o'),
+  bfas_ac = create_scoring_frame(
+    c('bbfas20x', 'bbfas21', 'bbfas22', 'bbfas23x', 'bbfas24', 
+      'bbfas25x', 'bbfas26x', 'bbfas27', 'bbfas28x', 'bbfas29'),
+    factor_name = 'bfas_ac'),
+  bfas_ap = create_scoring_frame(
+    c('bbfas30', 'bbfas31x', 'bbfas32', 'bbfas33x', 'bbfas34', 
+      'bbfas35', 'bbfas36x', 'bbfas37x', 'bbfas38x', 'bbfas102x'),
+    factor_name = 'bfas_ap'),
+  bfas_ci = create_scoring_frame(
+    c('bbfas40', 'bbfas41x', 'bbfas42x', 'bbfas43x', 'bbfas44', 
+      'bbfas45x', 'bbfas46', 'bbfas47', 'bbfas48x', 'bbfas49x'),
+    factor_name = 'bfas_ci'),
+  bfas_co = create_scoring_frame(
+    c('bbfas50x', 'bbfas51', 'bbfas52', 'bbfas53', 'bbfas54x', 
+      'bbfas55', 'bbfas56x', 'bbfas57x', 'bbfas58', 'bbfas59'),
+    factor_name = 'bfas_co'),
+  bfas_ea = create_scoring_frame(
+    c('bbfas70', 'bbfas71', 'bbfas72x', 'bbfas73', 'bbfas74x', 
+      'bbfas75', 'bbfas76', 'bbfas77x', 'bbfas78', 'bbfas79x'),
+    factor_name = 'bfas_ea'),
+  bfas_ee = create_scoring_frame(
+    c('bbfas60', 'bbfas61x', 'bbfas62x', 'bbfas63x', 'bbfas64', 
+      'bbfas65x', 'bbfas66x', 'bbfas67', 'bbfas68', 'bbfas69'),
+    factor_name = 'bfas_ee'),
+  bfas_nv9 = create_scoring_frame(
+    c('bbfas1x', 'bbfas2', 'bbfas3x', 'bbfas4', 'bbfas5x', 
+      'bbfas6', 'bbfas7x', 'bbfas8', 'bbfas9'),
+    factor_name = 'bfas_nv9'),
+  bfas_nv = create_scoring_frame(
+    c('bbfi58', 'bbfas1x', 'bbfas2', 'bbfas3x', 'bbfas4', 
+      'bbfas5x', 'bbfas6', 'bbfas7x', 'bbfas8', 'bbfas9'),
+    factor_name = 'bfas_nv'),
+  bfas_nw = create_scoring_frame(
+    c('bbfas10x', 'bbfas11', 'bbfas12x', 'bbfas13', 'bbfas14x', 
+      'bbfas15', 'bbfas16', 'bbfas17x', 'bbfas18', 'bbfas19'),
+    factor_name = 'bfas_nw'),
+  bfas_oi = create_scoring_frame(
+    c('bbfas80', 'bbfas81x', 'bbfas82', 'bbfas83', 'bbfas84x', 
+      'bbfas85x', 'bbfas86', 'bbfas87', 'bbfas88x', 'bbfas89'),
+    factor_name = 'bfas_oi'),
+  bfas_oo = create_scoring_frame(
+    c('bbfas90', 'bbfas91', 'bbfas92', 'bbfas93', 'bbfas94x', 
+      'bbfas95', 'bbfas96', 'bbfas97x', 'bbfas98x', 'bbfas99x'),
+    factor_name = 'bfas_oo'),
+  aspfin = create_scoring_frame(
+    c('basp12', 'basp13', 'basp14', 'basp15', 'basp16'),
+    factor_name = 'aspfin'),
+  aspfin_d = create_scoring_frame(
+    c('basp12', 'basp13', 'basp15'),
+    factor_name = 'aspfin_d'),
+  bfa_mt = create_scoring_frame(
+    c('abfas113', 'abfas114', 'abfas115', 'abfas116x', 'abfas117x', 'abfas118x'),
+    factor_name = 'bfa_mt'),
+  bfa_mt_d = create_scoring_frame(
+    c('abfas115', 'abfas116x', 'abfas117x', 'abfas118x'),
+    factor_name = 'bfa_mt_d'),
+  hrz_ind = create_scoring_frame(
+    c('aind1', 'aind2', 'aind3', 'aind4'),
+    factor_name = 'hrz_ind'),
+  hrz_ind_d = create_scoring_frame(
+    c('aind1', 'aind2', 'aind3'),
+    factor_name = 'hrz_ind_d'),
+  hrz_col = create_scoring_frame(
+    c('aind9', 'aind10', 'aind11', 'aind12'),
+    factor_name = 'hrz_col'),
+  hrz_col_d = create_scoring_frame(
+    c('aind10', 'aind11', 'aind12'),
+    factor_name = 'hrz_col_d'),
+  mvi = create_scoring_frame(
+    c('aval7', 'aval9', 'aval11', 'aval13', 'aval15', 'aval17', 'aval18', 'aval20', 'aval21', 
+      'aval23', 'aval8x', 'aval10x', 'aval12x', 'aval14x', 'aval16x', 'aval19x', 'aval22x'),
+    factor_name = 'mvi'),
+  usi = create_scoring_frame(
+    c('ausi1', 'ausi2x', 'ausi3x', 'ausi5', 'ausi6x', 'ausi7'),
+    factor_name = 'usi'),
+  usi_d = create_scoring_frame(
+    c('ausi3x', 'ausi6x', 'ausi7'),
+    factor_name = 'usi_d'),
+  vrt_ind = create_scoring_frame(
+    c('aind5', 'aind6', 'aind7', 'aind8'),
+    factor_name = 'vrt_ind'),
+  vrt_ind_d = create_scoring_frame(
+    c('aind5', 'aind6', 'aind7'),
+    factor_name = 'vrt_ind_d'),
+  vrt_col = create_scoring_frame(
+    c('aind13', 'aind14', 'aind15', 'aind16'),
+    factor_name = 'vrt_col'),
+  vrt_col_d = create_scoring_frame(
+    c('aind13', 'aind15', 'aind16'),
+    factor_name = 'vrt_col_d'))
+
+#scales with dropped items: drop_items <- list(
+#   'aspfin' = c('asp14','asp16'), 
+#   'bfa_mt' = c('bfas113', 'bfas114'), #118 breaks it
+#   'hrz_col' = c('ind9'),
+#   'hrz_ind' = c('ind4'),
+#   'usi' = c('usi1','usi2','usi5'), #most evidence from MI, but usi5 and usi2 are very skewed, might be worth checking.
+#   'vrt_col' = c('ind14'), 
+#   'vrt_ind' = c('ind8'), #some mi, lowest loading, "tense and aroused"
+# )
+
+lnt_scales_df <- do.call(dplyr::bind_rows, lnt_scales_list)
+
+
+pVarNames <- c(bfi_s_scale="Social Self-Regulation",
+               bfi_c=".Conscientiousness",
+               bfas_ci="..Industriousness",
+               bfas_co="..Orderliness",
+               bfi_hp8=".Honesty/Propriety",
+               bfi_a=".Agreeableness",
+               bfi_a6=".Agreeableness-Six",
+               bfas_ac="..Compassion",
+               bfas_ap="..Politeness",
+               bfi_n=".Neuroticism",
+               bfas_nv9 = ".Neuroticism-Nine",
+               bfas_nv="..Volatility",
+               bfas_nw="..Withdrawal",
+               bfi_d_scale="Dynamism",
+               bfi_e=".Extraversion",
+               bfas_ea="..Assertiveness",
+               bfas_ee="..Enthusiasm",
+               bfi_o=".Openness",
+               bfas_oi="..Intellect",
+               bfas_oo="..Openness")
+
+vVarNames <- c('aspfin'='Financial Aspirations',
+               'bfa_mt'='Materialism',
+               'hrz_col'='Horizontal Collectivism',
+               'hrz_ind'='Horizontal Individualism',
+               'mvi'='Mature Values Index',
+               'usi'='Unmitigated Self-Interest',
+               'vrt_col'='Vertical Collectivism',
+               'vrt_ind'='Vertical Individualism')
+```
+
+# Creating factor-item mapping
+
+As part of this process, outputting the alpha coefficients.
+
+```{r echo=F, warning=F, message=F}
+item_regexs <- paste0('^[abcd](',
+                      paste(unique(lnt_scales_df$item), 
+                            collapse = '|'),
+                      ')$')
+
+lnt_items_nat <- dplyr::select(lnt_df_nat, matches(item_regexs))
+
+create_wave_keys <- function(scoring_df, wave_prefix = 'a'){
+  scoring_df_w <- tidyr::spread(scoring_df, factor_name, scoring, fill = 0)
+  rownames(scoring_df_w) <- paste0(wave_prefix, scoring_df_w$item)
+  scoring_df_w <- scoring_df_w[,-1]
+  wave_keys <- psych::keys2list(scoring_df_w)
+  return(wave_keys)
+}
+
+
+
+wave1_keys <- create_wave_keys(lnt_scales_df, 'a')
+mvi_col <- which(names(wave1_keys) == 'mvi')
+wave1_scored <- psych::scoreItems(keys = wave1_keys[-mvi_col], lnt_items_nat, impute = 'none',
+                                  min = 1, max = 5)
+wave1_scored_mvi <- psych::scoreItems(keys = wave1_keys[mvi_col], lnt_items_nat, impute = 'none',
+                                      min = 1, max = 9)
+wave2_keys <- create_wave_keys(lnt_scales_df, 'b')
+wave2_scored <- psych::scoreItems(keys = wave2_keys[-mvi_col], lnt_items_nat, impute = 'none',
+                                  min = 1, max = 5)
+wave2_scored_mvi <- psych::scoreItems(keys = wave2_keys[mvi_col], lnt_items_nat, impute = 'none',
+                                      min = 1, max = 9)
+wave3_keys <- create_wave_keys(lnt_scales_df, 'c')
+wave3_scored <- psych::scoreItems(keys = wave3_keys[-mvi_col], lnt_items_nat, impute = 'none',
+                                  min = 1, max = 5)
+wave3_scored_mvi <- psych::scoreItems(keys = wave3_keys[mvi_col], lnt_items_nat, impute = 'none',
+                                      min = 1, max = 9)
+wave4_keys <- create_wave_keys(lnt_scales_df, 'd')
+wave4_scored <- psych::scoreItems(keys = wave4_keys[-mvi_col], lnt_items_nat,  impute = 'none',
+                                  min = 1, max = 5)
+wave4_scored_mvi <- psych::scoreItems(keys = wave4_keys[mvi_col], lnt_items_nat, impute = 'none',
+                                      min = 1, max = 9)
+
+pompit <- function(datas,min,max){
+  (datas-min)/(max-min)*100
+}
+
+all_waves_scored <- bind_rows(
+  list(`1` = bind_cols(pompit(as_data_frame(wave1_scored$scores), 1, 5), 
+                       pompit(as_data_frame(wave1_scored_mvi$scores), 1, 9)),
+       `2` = bind_cols(pompit(as_data_frame(wave2_scored$scores), 1, 5), 
+                       pompit(as_data_frame(wave2_scored_mvi$scores), 1, 9)),
+       `3` = bind_cols(pompit(as_data_frame(wave3_scored$scores), 1, 5), 
+                       pompit(as_data_frame(wave3_scored_mvi$scores), 1, 9)),
+       `4` = bind_cols(pompit(as_data_frame(wave4_scored$scores), 1, 5), 
+                       pompit(as_data_frame(wave4_scored_mvi$scores), 1, 9))),
+  .id = 'wave')
+
+all_waves_scored$aage <- lnt_df_nat$aage
+all_waves_scored$id <- 1:dim(lnt_df_nat)[1]
+all_waves_scored$subjid <- lnt_df_nat$subjid
+all_waves_scored$age <- as.numeric(all_waves_scored$aage) + 
+  as.numeric(all_waves_scored$wave) - 1
+all_waves_scored$decade_group <- factor(all_waves_scored$aage %/% 10)
+
+all_waves_scored_w <- all_waves_scored %>%
+  mutate(wave_letter = letters[as.numeric(wave)]) %>%
+  select(-aage, -id, -wave, -decade_group) %>%
+  gather(var, val, -subjid, -wave_letter) %>%
+  unite(var, wave_letter, var, sep = '') %>%
+  spread(var,val)
+
+all_waves_scored_w[is.na(all_waves_scored_w)] <- NA
+
+readr::write_tsv(all_waves_scored_w, path = '../Data/lnt_nat_recalc.tsv', col_names = F, na = '-9999')
+readr::write_lines(names(all_waves_scored_w), path = '../Data/lnt_nat_recalc_names.txt')
+
+cat('**Wave 1**\n\n')
+wave1_scored$alpha
+wave1_scored_mvi$alpha
+cat('**Wave 2**\n\n')
+wave2_scored$alpha
+wave2_scored_mvi$alpha
+cat('**Wave 3**\n\n')
+wave3_scored$alpha
+wave3_scored_mvi$alpha
+cat('**Wave 4**\n\n')
+wave4_scored$alpha
+wave4_scored_mvi$alpha
+```
+
+# Generate lavaan syntax
+
+*Note:* I use the identification strategy recommended by Widman, Ferrer, and Conger (2010) and set the intercept for the Wave 1 latent variable to 0, and the variance of the Wave 1 latent variable to 1 for each group.
+
+This is an example of the measurement model diagram, using Horizontal Collectivism, for one group demonstrating constraints for the strict measurement invariance model. Paths with the same label are constrained to have the same path weight, and in the strict invariance model, all labeled path weights must be the same for each decade group. The residual covariances are an exception: the constraint imposed is that residual covariance is the same across the same time-lag, for the same indicator (so e.g., `cov(aind9, bind9) = cov(bind9, cind9)`, and `cov(aind9, cind9) = cov(bind9, dind9)`), but these are not constrained to be the same across group. Since this constraint is imposed in every factorial invariance model tested, it does not affect the fit comparisons.
+
+```{r fig.width = 7.5, fig.height = 10, echo = F, warning = F, error = F}
+lnt_df_nat_decades <- dplyr::filter(lnt_df_nat, aage < 60, aage >= 20) 
+lnt_df_nat_decades$decade_group <- factor(lnt_df_nat_decades$aage %/% 10, levels = c(2, 3, 4, 5), labels = c('20s', '30s', '40s', '50s'))
+lnt_df_nat_decades$agender <- haven::as_factor(lnt_df_nat_decades$agender)
+lnt_nat_decades_items <- dplyr::select(lnt_df_nat_decades, matches(item_regexs), decade_group, agender)
+
+demo_model <- create_lav_invariance_model('hrz_col', 
+                                          get_factor_items('hrz_col', scoring_df = lnt_scales_df), 
+                                          type = 'strict')
+
+demo_model_fit <- sem_invar(demo_model, data = lnt_nat_decades_items, group = 'decade_group', do.fit = F)
+cat(demo_model)
+```
+
+```{r  fig.width = 7.5, fig.height = 10, echo = F, warning = F, error = F, eval=F}
+library(semPlot)
+semPaths(demo_model_fit, ask = F, include = 1, node.width = .75, layout = 'tree2', rotation = 2, curvature = 9,
+         intStyle = 'multi', levels = c(1,5,6,7), edge.color = '#bbbbbb', edge.label.color = '#444444',
+         nCharEdges = 5, edge.label.cex = .5, nCharNodes = 8)
+```
+
+
+```{r echo=F, results='hide', warning=F, message=F}
+factor_names <- c(names(vVarNames), paste0('bfi_', c('a','c','e','n','o')))
+ 
+fit_measures <- c('mfi', 'cfi', 'rmsea', 'rmsea.ci.lower', 'rmsea.ci.upper')
+
+invar_test_rez_fn <- '../Rez/invariance_measures_long_pers.RDS'
+if(!file.exists(invar_test_rez_fn)){
+  invar_tests_and_models <- test_factors_for_invariance(
+    factor_names = factor_names, 
+    indicators_df = lnt_scales_df, 
+    item_data = lnt_nat_decades_items, 
+    fit_measures = fit_measures, 
+    group = 'decade_group',
+    save_fits = T,
+    data_dir = file.path(data_dir, 'mi'),
+    missing = 'fiml')
+  invar_tests_and_models_df <- dplyr::bind_rows(invar_tests_and_models)
+  saveRDS(invar_tests_and_models_df, invar_test_rez_fn)
+} else {
+  invar_tests_and_models_df <- readRDS(invar_test_rez_fn)
+}
+```
+
+# Results
+
+## MFI, CFI & *IC
+
+To determine the invariance of measurement over groups, we can examine the $\chi^2$ test. But this is often an overly strict test with a large sample size. Relative change in AIC and BIC (with lower values, and negative changes, being better) help guide interpretation by incorporating information about the number of parameters (AIC, BIC) and sample size (BIC). Kang, McNeish, & Hancock (2016) recommend using McDonald's non-centrality parameter (McDonald, 1989) because it is not influenced by complexity, sample size, or measurement quality. Their simulation study indicates that under the null of no difference in model fit, a difference in the MFI, $\Delta\text{MFI}$, of < -.007 occurs in fewer than 5% of cases, and < -.01 in less that 1% of cases. They also caution against using cutoffs. 
+
+```{r results='asis', echo=F, warning=F, message=F}
+#  [1] "bfi_s_scale" "bfi_d_scale" "bfi_hp8"     "bfi_c"       "bfi_a"       "bfi_a6"     
+#  [7] "bfi_e"       "bfi_n"       "bfi_o"       "bfas_ac"     "bfas_ap"     "bfas_ci"    
+# [13] "bfas_co"     "bfas_ea"     "bfas_ee"     "bfas_nv9"    "bfas_nv"     "bfas_nw"    
+# [19] "bfas_oi"     "bfas_oo"     "aspfin"      "bfa_mt"      "hrz_ind"     "hrz_col"    
+# [25] "mvi"         "usi"         "vrt_ind"     "vrt_col"  
+
+invar_tests_and_models_df <- dplyr::mutate(
+  invar_tests_and_models_df, 
+  invar_type = factor(invar_type,
+                      levels = c('unconstrained', 'long_metric', 'long_strong', 'long_strict', 'baseline','metric','strong', 'strict'),
+                      labels = c('unconstrained', 'long_metric', 'long_strong', 'long_strict', 'baseline','metric','strong', 'strict')))
+
+invar_tests_and_models_df_w <- mutate_at(
+  tidyr::spread(
+    invar_tests_and_models_df,
+    fit_stat,
+    value),
+  vars(AIC:rmsea.ci.upper),
+  as.numeric)
+invar_tests_and_models_df_w <- arrange(
+  invar_tests_and_models_df_w,
+  factor_name, invar_type)
+invar_tests_and_models_df_w <- mutate_at(
+  group_by(invar_tests_and_models_df_w, factor_name),
+  vars(dAIC = AIC, dBIC = BIC, dCFI = cfi, dMFI = mfi),
+  function(x) x - lag(x))
+invar_tests_and_models_df_w <- mutate_at(
+  group_by(invar_tests_and_models_df_w, factor_name),
+  vars(d2AIC = AIC, d2BIC = BIC, d2CFI = cfi, d2MFI = mfi),
+  function(x) x - lag(x, n = 3))
+invar_tests_and_models_df_w <- dplyr::mutate(
+  ungroup(invar_tests_and_models_df_w),
+  dAIC = sprintf('%.1f', dAIC),
+  dBIC = sprintf('%.1f', dBIC),
+  d2AIC = sprintf('%.1f', d2AIC),
+  d2BIC = sprintf('%.1f', d2BIC),
+  Chisq = sprintf('%1.f', Chisq),
+  `P dChisq` = ifelse(`Pr(>Chisq)` < 1e-3, 
+                        '<.001',
+                        sprintf('%.3f', `Pr(>Chisq)`)),
+  dChisq = sprintf('%.1f',`Chisq diff`),
+  dDf = `Df diff`,
+  cfi = sprintf('%.3f', cfi),
+  dCFI = sprintf('%.3f', dCFI),
+  d2CFI = sprintf('%.3f', d2CFI),
+  mfi = sprintf('%.3f', mfi),
+  dMFI = sprintf('%.3f', dMFI),
+  d2MFI = sprintf('%.3f', d2MFI),
+  rmsea = sprintf('%.3f', rmsea),
+  rmsea.ci.lower = sprintf('%.3f', rmsea.ci.lower),
+  rmsea.ci.upper = sprintf('%.3f', rmsea.ci.upper),
+  rmsea = paste0(rmsea, ' [', rmsea.ci.lower, ', ', rmsea.ci.upper,']'),
+  factor_name = factor(factor_name, 
+                       levels = names(c(vVarNames, pVarNames)),
+                       labels = c(vVarNames, pVarNames)))
+invar_tests_and_models_df_w <- mutate(
+  arrange(invar_tests_and_models_df_w,
+          factor_name, invar_type),
+  factor_name_c = as.character(factor_name),
+  invar_type_c = as.character(invar_type)
+)
+invar_tests_and_models_df_w <- mutate_all(
+  invar_tests_and_models_df_w,
+  function(x) ifelse(is.na(x) | x == 'NA', '', x)
+)
+invar_tests_and_models_df_w <- dplyr::select(
+  invar_tests_and_models_df_w,
+  factor_name, invar_type, factor_name_c, invar_type_c, 
+  dAIC, d2AIC, dBIC, d2BIC, dChisq, Df, dDf, `P dChisq`,
+  cfi, dCFI, d2CFI, mfi, dMFI, d2MFI, rmsea, Chisq)
+
+column_labels <- c(
+  invar_type_c = 'Type', #1
+  dAIC = '$\\Delta\\text{AIC}$', #2
+  d2AIC = '$\\Delta_{1,4}\\text{AIC}$', #3
+  dBIC = '$\\Delta\\text{BIC}$', #4
+  d2BIC = '$\\Delta_{1,4}\\text{BIC}$', #5
+  dChisq = '$\\Delta\\chi^2$', #6
+  Df = '$\\text{Df}$', #7
+  dDf = '$\\Delta\\text{Df}$', #8
+  `P dChisq` = '$P(>\\Delta\\chi^2)$', #9
+  cfi = '$\\text{CFI}$', #10
+  dCFI = '$\\Delta\\text{CFI}$', #11
+  d2CFI = '$\\Delta_{1,4}\\text{CFI}$', #12
+  mfi = '$\\text{MFI}$', #13
+  dMFI = '$\\Delta\\text{MFI}$', #14
+  d2MFI = '$\\Delta_{1,4}\\text{MFI}$', #15
+  rmsea = '$\\text{RMSEA}$',#16
+  Chisq = '$\\chi^2$')#17
+
+
+
+conclusions_list <- as.list(rep('', length(c(vVarNames, pVarNames))))
+names(conclusions_list) <- c(vVarNames, pVarNames)
+
+#-.007 and -.01 
+conclusions_list[['Financial Aspirations']] <- 'Strong longitudnal invariance. Metric invariance between groups is well supported.'
+conclusions_list[['Materialism']] <- 'Possibly problematic. Unconstrained model does not converge. MFI may be too low for accurate model comparison.'
+conclusions_list[['Horizontal Collectivism']] <- 'Longitudinal metric invariance is supported. Group metric invariance is on the recommended cutoff.'
+conclusions_list[['Horizontal Individualism']] <- 'Invariant.'
+conclusions_list[['Mature Values Index']] <- 'Possibly problematic.'
+conclusions_list[['Unmitigated Self-Interest']] <- 'The unconstrained model did not converge. Strict longitudinal invariance may be supported. Group metric invariance is supported, but not strong group invariance.'
+conclusions_list[['Vertical Collectivism']] <- 'Longitudinal strict invariance is well supported. Group metric invariance is not supported.'
+conclusions_list[['Vertical Individualism']] <- 'Longitudinal strict invaraince is well supported. Group metric invariance is well supported.'
+conclusions_list[['Social Self-Regulation']] <- ''
+conclusions_list[['.Conscientiousness']] <- ''
+conclusions_list[['..Industriousness']] <- ''
+conclusions_list[['..Orderliness']] <- ''
+conclusions_list[['.Honesty/Propriety']] <- ''
+conclusions_list[['.Agreeableness']] <- ''
+conclusions_list[['.Agreeableness-Six']] <- ''
+conclusions_list[['..Compassion']] <- ''
+conclusions_list[['..Politeness']] <- ''
+conclusions_list[['.Neuroticism']] <- ''
+conclusions_list[['.Neuroticism-Nine']] <- ''
+conclusions_list[['..Volatility']] <- ''
+conclusions_list[['..Withdrawal']] <- ''
+conclusions_list[['Dynamism']] <- ''
+conclusions_list[['.Extraversion']] <- ''
+conclusions_list[['..Assertiveness']] <- ''
+conclusions_list[['..Enthusiasm']] <- ''
+conclusions_list[['.Openness']] <- ''
+conclusions_list[['..Intellect']] <- ''
+conclusions_list[['..Openness']] <- ''
+```
+
+**Note:** The baseline model adds to the strict longitudinal invariance model the additional constraint that covariance among residuals for the same item with the same lag distance must be the same.
+
+```{r buildtables, results = 'asis', echo = F}
+keepcols <- c(1,17,7,2,4,10,11,13,14,15,16)
+nothingburger <- do(group_by(invar_tests_and_models_df_w, factor_name),{
+  table_df <- select(., -factor_name, -invar_type, -factor_name_c)
+  title <- unique(.$factor_name_c)
+  
+  print(knitr::kable(
+    table_df[,keepcols],
+    col.names = column_labels[keepcols],
+    caption = title, 
+    row.names = T))
+  cat(paste0('\n\n<p>', conclusions_list[[title]], '</p>'))
+  data.frame()
+})
+```
+
+
+```{r echo=F, warning=F,message=F, eval=T}
+invar_mods_listenv <- listenv::listenv()
+
+options(knitr.kable.NA = '')
+zero2NA <- function(x){ifelse(x == 0, NA, x)}
+#read in data files
+for(fn in seq_along(factor_names)){
+  factor_name <- factor_names[[fn]]
+  invar_mods_listenv[[fn]] <- readRDS(file.path(data_dir,'mi',
+                                                paste0(factor_name, '_invariance_mods.RDS')))
+  
+}
+names(invar_mods_listenv) <- factor_names
+
+```
+
+## Modification Indices
+
+For some reason `lavaan` orders the groups like this: 
+
+1. 20s
+2. 50s
+3. 30s
+4. 40s
+
+### Financial aspirations
+
+Looking at issues with strict longitudinal invariance.
+
+```{r mifuncs, echo=F, eval=T}
+mi_metric <- function(afit, power = T, ...){
+  subset(
+    lavaan::modificationindices(afit,
+                                sort. = T, 
+                                free.remove = F, 
+                                minimum.value = getOption('minimum.value', 1), 
+                                op = '=~', power = power, ...),
+    letters[as.numeric(gsub('.*W([1234])', '\\1', lhs))]==gsub('^([abcd]).*', '\\1', rhs))
+}
+
+mi_strong <- function(afit, power = T, ...){
+  lavaan::modificationindices(afit,
+                              sort. = T, 
+                              free.remove = F, 
+                              minimum.value = getOption('minimum.value', 1), 
+                              op = '~1', power = power, ...)
+}
+
+mi_strict <- function(afit, power = T, ...){
+  subset(lavaan::modificationindices(afit,
+                                     sort. = T, 
+                                     free.remove = F, 
+                                     minimum.value = getOption('minimum.value', 1), 
+                                     op = '~~', power = power, ...),
+         lhs == rhs)
+}
+```
+
+```{r aspfinmi}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_mods_listenv[['aspfin']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_mods_listenv[['aspfin']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_mods_listenv[['aspfin']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+### Materialism
+
+```{r bfa_mt}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_mods_listenv[['bfa_mt']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_mods_listenv[['bfa_mt']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_mods_listenv[['bfa_mt']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+
+### Horizontal Collectivism
+
+```{r hrzcolmi}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_mods_listenv[['hrz_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_mods_listenv[['hrz_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_mods_listenv[['hrz_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+### Horizontal Individualism
+
+```{r hrzindmi}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_mods_listenv[['hrz_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_mods_listenv[['hrz_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_mods_listenv[['hrz_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+### Mature Values Index
+
+It's not clear that we can trust the invariance tests for this scale.
+
+### Unmitigated Self-Interest
+
+```{r usimi}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_mods_listenv[['usi']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_mods_listenv[['usi']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_mods_listenv[['usi']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+### Vertical Collectivism
+
+
+```{r vrtcolmi}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_mods_listenv[['vrt_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_mods_listenv[['vrt_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_mods_listenv[['vrt_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+### Vertical Individualism
+
+```{r vrtindmi}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_mods_listenv[['vrt_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_mods_listenv[['vrt_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_mods_listenv[['vrt_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+## Loadings
+
+All from the _most_ constrained model (longitudinal and group constraints).
+
+```{r writefactorloadtables, eval=T, results='asis'}
+for(fn in seq_along(names(vVarNames))){
+  a_factor_invariance_suite <- invar_mods_listenv[[fn]]
+  estload <- as.data.frame(inspect(a_factor_invariance_suite[[length(a_factor_invariance_suite)]],
+                          what="est")$`40s`$lambda)
+  stdload <- as.data.frame(inspect(a_factor_invariance_suite[[length(a_factor_invariance_suite)]],
+                          what="std")$`40s`$lambda)
+  names(stdload) <- paste0(names(stdload), '_std')
+  loadings <- bind_cols(item=rownames(estload), estload, stdload)
+  loadings <- dplyr::mutate_at(loadings, vars(-item), funs(as.numeric))
+  loadings <- dplyr::mutate_at(loadings, vars(-item), funs(zero2NA))
+  print(knitr::kable(loadings, digits = 2, caption = vVarNames[[fn]]))
+}
+```
+
+
+# LOESS Plots
+
+```{r loessplots, warning=F, message=F, echo=F}
+nullius <- lapply(names(vVarNames), function(var){
+  print(ggplot2::ggplot(
+    dplyr::filter(all_waves_scored, aage > 19, aage < 57), 
+    ggplot2::aes_string(x = 'age', y = var)) + 
+    ggplot2::geom_line(
+      stat = 'smooth', method = 'lm', formula = y ~ x,
+      ggplot2::aes(group = factor(id)), alpha = .1) +
+    ggplot2::geom_smooth(method = 'loess', span = .4, linetype = 2) +
+    # ggplot2::geom_line(
+    #   ggplot2::aes(group = decade_group),
+    #   stat = 'smooth', method = 'lm', color = 'black', alpha = .8, size = 1, linetype = 1) +
+    ggplot2::geom_line(
+      stat = 'smooth', method = 'lm', color = 'black', alpha = .5, size = 1) +
+    ggplot2::coord_cartesian(ylim = c(1, ifelse(var == 'mvi', 9, 5))) + 
+    ggplot2::theme_minimal() + 
+    labs(title = vVarNames[var]))
+})
+```
+
+# Invariance dropping items
+
+
+```{r echo=F, results='hide', warning=F, message=F, eval=T}
+item_labels_to_text <- function(item_col_names, adf){
+  paste(unlist(lapply(item_col_names, function(i){
+    paste0(i, ': ', attr(adf[[paste0('a',i)]], 'label'))
+  })), 
+  collapse = '; ')
+}
+drop_items <- list(
+  'aspfin' = c('asp14','asp16'), 
+  'bfa_mt' = c('bfas113', 'bfas114'), #118 breaks it
+  'hrz_col' = c('ind9'),
+  'hrz_ind' = c('ind4'),
+  'mvi' = c(''),
+  'usi' = c('usi1','usi2','usi5'), #most evidence from MI, but usi5 and usi2 are very skewed, might be worth checking.
+  'vrt_col' = c('ind14'), 
+  'vrt_ind' = c('ind8'), #some mi, lowest loading, "tense and aroused"
+  'bfi_a' = c(''),
+  'bfi_c' = c(''),
+  'bfi_e' = c(''),
+  'bfi_n' = c(''),
+  'bfi_o' = c('') 
+)
+
+invar_test_rez_itmdrp_fn <- '../Rez/invariance_measures_long_pers_itmdrp.RDS'
+if(!file.exists(invar_test_rez_itmdrp_fn)){
+  invar_tests_and_models_itmdrp <- test_factors_for_invariance(
+    factor_names = names(drop_items)[drop_items != ''], 
+    indicators_df = lnt_scales_df, 
+    item_data = lnt_nat_decades_items, 
+    fit_measures = fit_measures, 
+    group = 'decade_group',
+    save_fits = T,
+    data_dir = file.path(data_dir, 'itm_drp'),
+    drop_items = drop_items,
+    missing = 'fiml')
+  invar_tests_and_models_itmdrp_df <- dplyr::bind_rows(invar_tests_and_models_itmdrp)
+  saveRDS(invar_tests_and_models_itmdrp, invar_test_rez_itmdrp_fn)
+} else {
+  invar_tests_and_models_itmdrp <- readRDS(invar_test_rez_itmdrp_fn)
+  invar_tests_and_models_itmdrp_df <- dplyr::bind_rows(invar_tests_and_models_itmdrp)
+}
+```
+
+```{r results='asis', echo=F, warning=F, message=F}
+#  [1] "bfi_s_scale" "bfi_d_scale" "bfi_hp8"     "bfi_c"       "bfi_a"       "bfi_a6"     
+#  [7] "bfi_e"       "bfi_n"       "bfi_o"       "bfas_ac"     "bfas_ap"     "bfas_ci"    
+# [13] "bfas_co"     "bfas_ea"     "bfas_ee"     "bfas_nv9"    "bfas_nv"     "bfas_nw"    
+# [19] "bfas_oi"     "bfas_oo"     "aspfin"      "bfa_mt"      "hrz_ind"     "hrz_col"    
+# [25] "mvi"         "usi"         "vrt_ind"     "vrt_col"  
+
+invar_tests_and_models_itmdrp_df <- dplyr::mutate(
+  invar_tests_and_models_itmdrp_df, 
+  invar_type = factor(invar_type,
+                      levels = c('unconstrained', 'long_metric', 'long_strong', 'long_strict', 'baseline','metric','strong', 'strict'),
+                      labels = c('unconstrained', 'long_metric', 'long_strong', 'long_strict', 'baseline','metric','strong', 'strict')))
+
+invar_tests_and_models_itmdrp_df_w <- mutate_at(
+  tidyr::spread(
+    invar_tests_and_models_itmdrp_df,
+    fit_stat,
+    value),
+  vars(AIC:rmsea.ci.upper),
+  as.numeric)
+invar_tests_and_models_itmdrp_df_w <- arrange(
+  invar_tests_and_models_itmdrp_df_w,
+  factor_name, invar_type)
+invar_tests_and_models_itmdrp_df_w <- mutate_at(
+  group_by(invar_tests_and_models_itmdrp_df_w, factor_name),
+  vars(dAIC = AIC, dBIC = BIC, dCFI = cfi, dMFI = mfi),
+  function(x) x - lag(x))
+invar_tests_and_models_itmdrp_df_w <- mutate_at(
+  group_by(invar_tests_and_models_itmdrp_df_w, factor_name),
+  vars(d2AIC = AIC, d2BIC = BIC, d2CFI = cfi, d2MFI = mfi),
+  function(x) x - lag(x, n = 3))
+invar_tests_and_models_itmdrp_df_w <- dplyr::mutate(
+  ungroup(invar_tests_and_models_itmdrp_df_w),
+  dAIC = sprintf('%.1f', dAIC),
+  dBIC = sprintf('%.1f', dBIC),
+  d2AIC = sprintf('%.1f', d2AIC),
+  d2BIC = sprintf('%.1f', d2BIC),
+  Chisq = sprintf('%1.f', Chisq),
+  `P dChisq` = ifelse(`Pr(>Chisq)` < 1e-3, 
+                        '<.001',
+                        sprintf('%.3f', `Pr(>Chisq)`)),
+  dChisq = sprintf('%.1f',`Chisq diff`),
+  dDf = `Df diff`,
+  cfi = sprintf('%.3f', cfi),
+  dCFI = sprintf('%.3f', dCFI),
+  d2CFI = sprintf('%.3f', d2CFI),
+  mfi = sprintf('%.3f', mfi),
+  dMFI = sprintf('%.3f', dMFI),
+  d2MFI = sprintf('%.3f', d2MFI),
+  rmsea = sprintf('%.3f', rmsea),
+  rmsea.ci.lower = sprintf('%.3f', rmsea.ci.lower),
+  rmsea.ci.upper = sprintf('%.3f', rmsea.ci.upper),
+  rmsea = paste0(rmsea, ' [', rmsea.ci.lower, ', ', rmsea.ci.upper,']'),
+  factor_name = factor(factor_name, 
+                       levels = names(c(vVarNames, pVarNames)),
+                       labels = c(vVarNames, pVarNames)))
+invar_tests_and_models_itmdrp_df_w <- mutate(
+  arrange(invar_tests_and_models_itmdrp_df_w,
+          factor_name, invar_type),
+  factor_name_c = as.character(factor_name),
+  invar_type_c = as.character(invar_type)
+)
+invar_tests_and_models_itmdrp_df_w <- mutate_all(
+  invar_tests_and_models_itmdrp_df_w,
+  function(x) ifelse(is.na(x) | x == 'NA', '', x)
+)
+invar_tests_and_models_itmdrp_df_w <- dplyr::select(
+  invar_tests_and_models_itmdrp_df_w,
+  factor_name, invar_type, factor_name_c, invar_type_c, 
+  dAIC, d2AIC, dBIC, d2BIC, dChisq, Df, dDf, `P dChisq`,
+  cfi, dCFI, d2CFI, mfi, dMFI, d2MFI, rmsea, Chisq)
+
+column_labels <- c(
+  invar_type_c = 'Type', #1
+  dAIC = '$\\Delta\\text{AIC}$', #2
+  d2AIC = '$\\Delta_{1,4}\\text{AIC}$', #3
+  dBIC = '$\\Delta\\text{BIC}$', #4
+  d2BIC = '$\\Delta_{1,4}\\text{BIC}$', #5
+  dChisq = '$\\Delta\\chi^2$', #6
+  Df = '$\\text{Df}$', #7
+  dDf = '$\\Delta\\text{Df}$', #8
+  `P dChisq` = '$P(>\\Delta\\chi^2)$', #9
+  cfi = '$\\text{CFI}$', #10
+  dCFI = '$\\Delta\\text{CFI}$', #11
+  d2CFI = '$\\Delta_{1,4}\\text{CFI}$', #12
+  mfi = '$\\text{MFI}$', #13
+  dMFI = '$\\Delta\\text{MFI}$', #14
+  d2MFI = '$\\Delta_{1,4}\\text{MFI}$', #15
+  rmsea = '$\\text{RMSEA}$',#16
+  Chisq = '$\\chi^2$')#17
+
+
+
+conclusions_list <- as.list(rep('', length(c(vVarNames, pVarNames))))
+names(conclusions_list) <- c(vVarNames, pVarNames)
+
+lnt_item_labels_to_text <- function(item_labels){
+  item_labels_to_text(item_labels, lnt_nat_decades_items)
+}
+
+#-.007 and -.01 
+conclusions_list[['Financial Aspirations']] <- paste0('Invariant. Total $\\Delta\\text{MFI}$ = -.005 (versus -.023 previously). Dropped ', lnt_item_labels_to_text(drop_items[['aspfin']]))
+conclusions_list[['Materialism']] <- paste0('Invariant. Total $\\Delta\\text{MFI}$ = -.008. Also solved convergence problems (fit decrement was uncertain as a result, but < -.024 previously). Dropped  ', lnt_item_labels_to_text(drop_items[['bfa_mt']]))
+conclusions_list[['Horizontal Collectivism']] <- paste0('Some improvement. Better overall fit, improved invariance, but still has $\\Delta\\text{MFI}$ = -.032 (versus -.056 previously). Dropping a different item that had lower MIs lead to no improvement in MFI. This may be the best we can do. Dropped ', lnt_item_labels_to_text(drop_items[['hrz_col']]))
+conclusions_list[['Horizontal Individualism']] <- paste0('About the same. Better overall fit, worse change in fit $\\Delta\\text{MFI}$ is -.012 originally, -.013 after dropping an item. Dropped ', lnt_item_labels_to_text(drop_items[['hrz_ind']]))
+conclusions_list[['Mature Values Index']] <- ''
+conclusions_list[['Unmitigated Self-Interest']] <- paste0('Invariant. Total $\\Delta\\text{MFI}$ = -.010 (versus -.038 previously). Item 2 and 5 were very skewed. Dropped ', lnt_item_labels_to_text(drop_items[['usi']]))
+conclusions_list[['Vertical Collectivism']] <- paste0('Some improvement. Better overall fit, improved invariance, but still has $\\Delta\\text{MFI}$ = -.017 (versus -.043 previously). Dropped ', lnt_item_labels_to_text(drop_items[['vrt_col']]))
+conclusions_list[['Vertical Individualism']] <- paste0('Invariant. Total $\\Delta\\text{MFI}$ = -.009 (versus -.032 previously) Dropped ', lnt_item_labels_to_text(drop_items[['vrt_ind']]))
+conclusions_list[['Social Self-Regulation']] <- ''
+conclusions_list[['.Conscientiousness']] <- ''
+conclusions_list[['..Industriousness']] <- ''
+conclusions_list[['..Orderliness']] <- ''
+conclusions_list[['.Honesty/Propriety']] <- ''
+conclusions_list[['.Agreeableness']] <- ''
+conclusions_list[['.Agreeableness-Six']] <- ''
+conclusions_list[['..Compassion']] <- ''
+conclusions_list[['..Politeness']] <- ''
+conclusions_list[['.Neuroticism']] <- ''
+conclusions_list[['.Neuroticism-Nine']] <- ''
+conclusions_list[['..Volatility']] <- ''
+conclusions_list[['..Withdrawal']] <- ''
+conclusions_list[['Dynamism']] <- ''
+conclusions_list[['.Extraversion']] <- ''
+conclusions_list[['..Assertiveness']] <- ''
+conclusions_list[['..Enthusiasm']] <- ''
+conclusions_list[['.Openness']] <- ''
+conclusions_list[['..Intellect']] <- ''
+conclusions_list[['..Openness']] <- ''
+```
+
+## Results
+
+### MFI etc
+
+```{r results = 'asis', echo = F}
+keepcols <- c(1,17,7,2,4,10,11,13,14,15,16)
+nothingburger <- do(group_by(invar_tests_and_models_itmdrp_df_w, factor_name),{
+  table_df <- select(., -factor_name, -invar_type, -factor_name_c)
+  title <- unique(.$factor_name_c)
+  
+  print(knitr::kable(
+    table_df[,keepcols],
+    col.names = column_labels[keepcols],
+    caption = title, 
+    row.names = T))
+  cat(paste0('\n\n<p>', conclusions_list[[title]], '</p>'))
+  data.frame()
+})
+```
+
+## Modification Indices
+
+```{r echo=F, warning=F,message=F, eval=T}
+invar_drpitm_mods_listenv <- listenv::listenv()
+
+options(knitr.kable.NA = '')
+#read in data files
+for(fn in seq_along(names(drop_items)[drop_items != ''])){
+  factor_name <- names(drop_items)[drop_items != ''][[fn]]
+  invar_drpitm_mods_listenv[[fn]] <- readRDS(file.path(data_dir,'itm_drp',
+                                                paste0(factor_name, '_invariance_mods.RDS')))
+  
+}
+names(invar_drpitm_mods_listenv) <- names(drop_items)[drop_items != '']
+
+```
+
+For some reason `lavaan` orders the groups like this: 
+
+1. 20s
+2. 50s
+3. 30s
+4. 40s
+
+### Financial aspirations
+
+Looking at issues with strict longitudinal invariance.
+
+```{r aspfinmi2}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_drpitm_mods_listenv[['aspfin']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_drpitm_mods_listenv[['aspfin']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_drpitm_mods_listenv[['aspfin']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+### Materialism
+
+```{r bfa_mt2}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_drpitm_mods_listenv[['bfa_mt']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_drpitm_mods_listenv[['bfa_mt']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_drpitm_mods_listenv[['bfa_mt']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+
+### Horizontal Collectivism
+
+```{r hrzcolmi2}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_drpitm_mods_listenv[['hrz_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_drpitm_mods_listenv[['hrz_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_drpitm_mods_listenv[['hrz_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+### Horizontal Individualism
+
+```{r hrzindmi2}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_drpitm_mods_listenv[['hrz_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_drpitm_mods_listenv[['hrz_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_drpitm_mods_listenv[['hrz_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+### Mature Values Index
+
+It's not clear that we can trust the invariance tests for this scale.
+
+### Unmitigated Self-Interest
+
+```{r usimi2}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_drpitm_mods_listenv[['usi']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_drpitm_mods_listenv[['usi']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_drpitm_mods_listenv[['usi']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+### Vertical Collectivism
+
+
+```{r vrtcolmi2}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_drpitm_mods_listenv[['vrt_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_drpitm_mods_listenv[['vrt_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_drpitm_mods_listenv[['vrt_col']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+
+### Vertical Individualism
+
+```{r vrtindmi2}
+options(minimum.value=2.5)
+knitr::kable(
+  mi_metric(invar_drpitm_mods_listenv[['vrt_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_loadings')
+knitr::kable(
+  mi_strong(invar_drpitm_mods_listenv[['vrt_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_intercepts')
+knitr::kable(
+  mi_strict(invar_drpitm_mods_listenv[['vrt_ind']][[7]]),
+  digits = 2, row.names = F, caption = 'group_strict_variances')
+```
+

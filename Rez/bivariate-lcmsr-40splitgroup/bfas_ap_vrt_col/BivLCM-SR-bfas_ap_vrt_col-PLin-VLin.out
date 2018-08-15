@@ -1,0 +1,985 @@
+Mplus VERSION 8 (Linux)
+MUTHEN & MUTHEN
+07/08/2018   5:20 PM
+
+INPUT INSTRUCTIONS
+
+
+  title: PxVx Bivariate LCM-SR - 40splitgroup - Linear bfas_ap with Linear vrt_col;
+  data: file = /home/jflournoy/code_new/lnt_pxvx/Data/lnt_nat_recalc.tsv;
+
+  variable:
+  names =
+  subjid
+  aage
+  aaspfin
+  aaspfin_d
+  abfa_mt
+  abfa_mt_d
+  abfas_ac
+  abfas_ap
+  abfas_ci
+  abfas_co
+  abfas_ea
+  abfas_ee
+  abfas_nv
+  abfas_nv9
+  abfas_nw
+  abfas_oi
+  abfas_oo
+  abfi_a
+  abfi_a6
+  abfi_c
+  abfi_d_scale
+  abfi_e
+  abfi_hp8
+  abfi_n
+  abfi_o
+  abfi_s_scale
+  ahrz_col
+  ahrz_col_d
+  ahrz_ind
+  ahrz_ind_d
+  amvi
+  ausi
+  ausi_d
+  avrt_col
+  avrt_col_d
+  avrt_ind
+  avrt_ind_d
+  bage
+  baspfin
+  baspfin_d
+  bbfa_mt
+  bbfa_mt_d
+  bbfas_ac
+  bbfas_ap
+  bbfas_ci
+  bbfas_co
+  bbfas_ea
+  bbfas_ee
+  bbfas_nv
+  bbfas_nv9
+  bbfas_nw
+  bbfas_oi
+  bbfas_oo
+  bbfi_a
+  bbfi_a6
+  bbfi_c
+  bbfi_d_scale
+  bbfi_e
+  bbfi_hp8
+  bbfi_n
+  bbfi_o
+  bbfi_s_scale
+  bhrz_col
+  bhrz_col_d
+  bhrz_ind
+  bhrz_ind_d
+  bmvi
+  busi
+  busi_d
+  bvrt_col
+  bvrt_col_d
+  bvrt_ind
+  bvrt_ind_d
+  cage
+  caspfin
+  caspfin_d
+  cbfa_mt
+  cbfa_mt_d
+  cbfas_ac
+  cbfas_ap
+  cbfas_ci
+  cbfas_co
+  cbfas_ea
+  cbfas_ee
+  cbfas_nv
+  cbfas_nv9
+  cbfas_nw
+  cbfas_oi
+  cbfas_oo
+  cbfi_a
+  cbfi_a6
+  cbfi_c
+  cbfi_d_scale
+  cbfi_e
+  cbfi_hp8
+  cbfi_n
+  cbfi_o
+  cbfi_s_scale
+  chrz_col
+  chrz_col_d
+  chrz_ind
+  chrz_ind_d
+  cmvi
+  cusi
+  cusi_d
+  cvrt_col
+  cvrt_col_d
+  cvrt_ind
+  cvrt_ind_d
+  dage
+  daspfin
+  daspfin_d
+  dbfa_mt
+  dbfa_mt_d
+  dbfas_ac
+  dbfas_ap
+  dbfas_ci
+  dbfas_co
+  dbfas_ea
+  dbfas_ee
+  dbfas_nv
+  dbfas_nv9
+  dbfas_nw
+  dbfas_oi
+  dbfas_oo
+  dbfi_a
+  dbfi_a6
+  dbfi_c
+  dbfi_d_scale
+  dbfi_e
+  dbfi_hp8
+  dbfi_n
+  dbfi_o
+  dbfi_s_scale
+  dhrz_col
+  dhrz_col_d
+  dhrz_ind
+  dhrz_ind_d
+  dmvi
+  dusi
+  dusi_d
+  dvrt_col
+  dvrt_col_d
+  dvrt_ind
+  dvrt_ind_d;
+
+  USEVARIABLES =
+  abfas_ap
+  bbfas_ap
+  cbfas_ap
+  dbfas_ap
+  avrt_col
+  bvrt_col
+  cvrt_col
+  dvrt_col
+  a1
+  a2
+  a3
+  a4
+  aagegrp
+  ;
+
+  missing = all (-9999);
+
+  tscores = a1 a2 a3 a4;
+
+  grouping = aagegrp (0=earlier, 1=later);
+
+  DEFINE:
+
+  aagegrp = aage;
+
+  cut aagegrp (39);
+
+  a1 = aage + 0 - 36;
+  a2 = aage + 1 - 36;
+  a3 = aage + 2 - 36;
+  a4 = aage + 3 - 36;
+
+  ANALYSIS:
+  TYPE=RANDOM;
+  PROCESSORS = 6;
+  model=nocovariances; ! supresses default estimation of certain covs in model;
+
+  MODEL:
+
+  i_bfas_ap s_bfas_ap | abfas_ap bbfas_ap cbfas_ap dbfas_ap AT a1 a2 a3 a4;
+  i_vrt_col s_vrt_col | avrt_col bvrt_col cvrt_col dvrt_col AT a1 a2 a3 a4;
+
+  ! freeing factor covs because of "nocovariances"
+  ! But ensure they are constrained across groups
+  s_bfas_ap WITH i_bfas_ap (p)
+  s_vrt_col (q)
+  i_vrt_col (r);
+  i_bfas_ap WITH s_vrt_col (s)
+  i_vrt_col (t);
+  s_vrt_col WITH i_vrt_col (u);
+
+  !constrain latent growth means across groups
+  [i_bfas_ap] (v);
+  [s_bfas_ap] (w);
+  [i_vrt_col] (x);
+  [s_vrt_col] (y);
+
+  !constrain latent growth variances across groups
+  i_bfas_ap (l);
+  s_bfas_ap (m);
+  i_vrt_col (n);
+  s_vrt_col (o);
+
+  p1 BY abfas_ap@1; ! Residual "factors";
+  p2 BY bbfas_ap@1;
+  p3 BY cbfas_ap@1;
+  p4 BY dbfas_ap@1;
+
+  v1 BY avrt_col@1; ! Residual "factors";
+  v2 BY bvrt_col@1;
+  v3 BY cvrt_col@1;
+  v4 BY dvrt_col@1;
+
+  !residual variances on observed/manifest vars set to 0
+  abfas_ap@0;
+  bbfas_ap@0;
+  cbfas_ap@0;
+  dbfas_ap@0;
+
+  !residual variances on observed/manifest vars set to 0
+  avrt_col@0;
+  bvrt_col@0;
+  cvrt_col@0;
+  dvrt_col@0;
+
+  ! means of observed/manifest vars set to 0
+  [abfas_ap@0];
+  [bbfas_ap@0];
+  [cbfas_ap@0];
+  [dbfas_ap@0];
+
+  ! means of observed/manifest vars set to 0
+  [avrt_col@0];
+  [bvrt_col@0];
+  [cvrt_col@0];
+  [dvrt_col@0];
+
+  [p1@0]; ! means of residual "factors" set to 0
+  [p2@0];
+  [p3@0];
+  [p4@0];
+
+  [v1@0]; ! means of residual "factors" set to 0
+  [v2@0];
+  [v3@0];
+  [v4@0];
+
+  p4 on p3 (a); ! Autoregressive paths constrained to equality
+  p3 on p2 (a);
+  p2 on p1 (a);
+
+  v4 on v3 (b); ! Autoregressive paths constrained to equality
+  v3 on v2 (b);
+  v2 on v1 (b);
+
+  p4 on v3 (c); ! Cross-lagged paths constrained to equality
+  p3 on v2 (c);
+  p2 on v1 (c);
+
+  v4 on p3 (d); ! Cross-lagged paths constrained to equality
+  v3 on p2 (d);
+  v2 on p1 (d);
+
+  p1 with v1; !(this one is not like the others)
+
+  p2 with v2 (e); ! Within-wave correlations constrained to equality
+  p3 with v3 (e);
+  p4 with v4 (e);
+
+  p2 p3 p4 (f); ! estimate variances of residual "factors"
+  v2 v3 v4 (g); ! estimate variances of residual "factors"
+
+  MODEL earlier:
+
+  p4 on p3 (a23); ! Autoregressive paths constrained to equality
+  p3 on p2 (a23);
+  p2 on p1 (a23);
+
+  v4 on v3 (b23); ! Autoregressive paths constrained to equality
+  v3 on v2 (b23);
+  v2 on v1 (b23);
+
+  p4 on v3 (c23); ! Cross-lagged paths constrained to equality
+  p3 on v2 (c23);
+  p2 on v1 (c23);
+
+  v4 on p3 (d23); ! Cross-lagged paths constrained to equality
+  v3 on p2 (d23);
+  v2 on p1 (d23);
+
+  p1 with v1; !(this one is not like the others)
+
+  p2 with v2 (e23); ! Within-wave correlations constrained to equality
+  p3 with v3 (e23);
+  p4 with v4 (e23);
+
+  p2 p3 p4 (f23); ! estimate variances of residual "factors"
+  v2 v3 v4 (g23); ! estimate variances of residual "factors"
+
+  MODEL later:
+
+  p4 on p3 (a45); ! Autoregressive paths constrained to equality
+  p3 on p2 (a45);
+  p2 on p1 (a45);
+
+  v4 on v3 (b45); ! Autoregressive paths constrained to equality
+  v3 on v2 (b45);
+  v2 on v1 (b45);
+
+  p4 on v3 (c45); ! Cross-lagged paths constrained to equality
+  p3 on v2 (c45);
+  p2 on v1 (c45);
+
+  v4 on p3 (d45); ! Cross-lagged paths constrained to equality
+  v3 on p2 (d45);
+  v2 on p1 (d45);
+
+  p1 with v1; !(this one is not like the others)
+
+  p2 with v2 (e45); ! Within-wave correlations constrained to equality
+  p3 with v3 (e45);
+  p4 with v4 (e45);
+
+  p2 p3 p4 (f45); ! estimate variances of residual "factors"
+  v2 v3 v4 (g45); ! estimate variances of residual "factors"
+
+  OUTPUT: SAMPSTAT PATTERNS;
+
+
+
+*** WARNING
+  Data set contains unknown or missing values for GROUPING,
+  PATTERN, COHORT, CLUSTER and/or STRATIFICATION variables.
+  Number of cases with unknown or missing values:  5
+   1 WARNING(S) FOUND IN THE INPUT INSTRUCTIONS
+
+
+
+PxVx Bivariate LCM-SR - 40splitgroup - Linear bfas_ap with Linear vrt_col;
+
+SUMMARY OF ANALYSIS
+
+Number of groups                                                 2
+Number of observations
+   Group EARLIER                                               534
+   Group LATER                                                 330
+   Total sample size                                           864
+
+Number of dependent variables                                    8
+Number of independent variables                                  0
+Number of continuous latent variables                           12
+
+Observed dependent variables
+
+  Continuous
+   ABFAS_AP    BBFAS_AP    CBFAS_AP    DBFAS_AP    AVRT_COL    BVRT_COL
+   CVRT_COL    DVRT_COL
+
+Continuous latent variables
+   P1          P2          P3          P4          V1          V2
+   V3          V4          I_BFAS_A    S_BFAS_A    I_VRT_CO    S_VRT_CO
+
+Variables with special functions
+
+  Grouping variable     AAGEGRP
+
+  Time scores
+   A1          A2          A3          A4
+
+
+Estimator                                                      MLR
+Information matrix                                        OBSERVED
+Maximum number of iterations                                   100
+Convergence criterion                                    0.100D-05
+Maximum number of EM iterations                                500
+Convergence criteria for the EM algorithm
+  Loglikelihood change                                   0.100D-02
+  Relative loglikelihood change                          0.100D-05
+  Derivative                                             0.100D-03
+Minimum variance                                         0.100D-03
+Maximum number of steepest descent iterations                   20
+Maximum number of iterations for H1                           2000
+Convergence criterion for H1                             0.100D-03
+Optimization algorithm                                         EMA
+
+Input data file(s)
+  /home/jflournoy/code_new/lnt_pxvx/Data/lnt_nat_recalc.tsv
+Input data format  FREE
+
+
+SUMMARY OF DATA
+
+   Group EARLIER
+     Number of missing data patterns            16
+
+   Group LATER
+     Number of missing data patterns            15
+
+
+SUMMARY OF MISSING DATA PATTERNS
+
+
+     MISSING DATA PATTERNS (x = not missing) FOR EARLIER
+
+           1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16
+ ABFAS_AP  x  x  x  x  x  x  x  x  x  x  x     x  x  x  x
+ BBFAS_AP  x     x     x  x  x        x  x  x  x  x
+ CBFAS_AP  x        x  x     x     x  x     x  x  x  x
+ DBFAS_AP  x     x  x  x        x           x  x     x  x
+ AVRT_COL  x  x  x  x  x  x  x  x  x  x  x  x  x  x  x  x
+ BVRT_COL  x     x     x  x  x        x     x     x  x
+ CVRT_COL  x        x        x     x        x  x  x  x
+ DVRT_COL  x     x  x  x        x           x  x  x  x
+
+
+     MISSING DATA PATTERN FREQUENCIES FOR EARLIER
+
+    Pattern   Frequency     Pattern   Frequency     Pattern   Frequency
+          1         324           7          20          13           2
+          2         101           8          14          14           1
+          3          14           9          12          15           1
+          4          12          10           1          16           1
+          5           1          11           2
+          6          26          12           2
+
+
+     MISSING DATA PATTERNS (x = not missing) FOR LATER
+
+           1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+ ABFAS_AP  x  x  x  x  x  x  x  x  x  x     x  x  x  x
+ BBFAS_AP  x     x     x  x  x        x  x  x     x
+ CBFAS_AP  x        x  x     x     x     x  x        x
+ DBFAS_AP  x     x  x  x        x        x  x     x
+ AVRT_COL  x  x  x  x  x  x  x  x  x  x  x  x     x  x
+ BVRT_COL  x     x     x  x  x           x
+ CVRT_COL  x        x        x     x     x  x
+ DVRT_COL  x     x  x  x        x        x  x     x
+
+
+     MISSING DATA PATTERN FREQUENCIES FOR LATER
+
+    Pattern   Frequency     Pattern   Frequency     Pattern   Frequency
+          1         164           6          22          11           1
+          2          68           7          26          12           1
+          3          12           8          10          13           1
+          4           9           9          11          14           1
+          5           1          10           2          15           1
+
+
+COVARIANCE COVERAGE OF DATA
+
+Minimum covariance coverage value   0.100
+
+
+     PROPORTION OF DATA PRESENT FOR EARLIER
+
+
+           Covariance Coverage
+              ABFAS_AP      BBFAS_AP      CBFAS_AP      DBFAS_AP      AVRT_COL
+              ________      ________      ________      ________      ________
+ ABFAS_AP       0.996
+ BBFAS_AP       0.732         0.736
+ CBFAS_AP       0.700         0.657         0.704
+ DBFAS_AP       0.691         0.642         0.640         0.695
+ AVRT_COL       0.996         0.736         0.704         0.695         1.000
+ BVRT_COL       0.727         0.728         0.655         0.640         0.730
+ CVRT_COL       0.697         0.654         0.700         0.639         0.700
+ DVRT_COL       0.691         0.644         0.642         0.693         0.695
+
+
+           Covariance Coverage
+              BVRT_COL      CVRT_COL      DVRT_COL
+              ________      ________      ________
+ BVRT_COL       0.730
+ CVRT_COL       0.652         0.700
+ DVRT_COL       0.642         0.640         0.695
+
+
+     PROPORTION OF DATA PRESENT FOR LATER
+
+
+           Covariance Coverage
+              ABFAS_AP      BBFAS_AP      CBFAS_AP      DBFAS_AP      AVRT_COL
+              ________      ________      ________      ________      ________
+ ABFAS_AP       0.997
+ BBFAS_AP       0.697         0.700
+ CBFAS_AP       0.655         0.594         0.658
+ DBFAS_AP       0.600         0.542         0.536         0.603
+ AVRT_COL       0.997         0.700         0.658         0.603         1.000
+ BVRT_COL       0.694         0.694         0.594         0.542         0.697
+ CVRT_COL       0.645         0.585         0.648         0.533         0.648
+ DVRT_COL       0.603         0.545         0.539         0.603         0.606
+
+
+           Covariance Coverage
+              BVRT_COL      CVRT_COL      DVRT_COL
+              ________      ________      ________
+ BVRT_COL       0.697
+ CVRT_COL       0.585         0.648
+ DVRT_COL       0.545         0.536         0.606
+
+
+SAMPLE STATISTICS
+
+
+     ESTIMATED SAMPLE STATISTICS FOR EARLIER
+
+
+           Means
+              ABFAS_AP      BBFAS_AP      CBFAS_AP      DBFAS_AP      AVRT_COL
+              ________      ________      ________      ________      ________
+               67.908        68.426        69.101        69.408        70.365
+
+
+           Means
+              BVRT_COL      CVRT_COL      DVRT_COL
+              ________      ________      ________
+               68.234        67.292        67.281
+
+
+           Covariances
+              ABFAS_AP      BBFAS_AP      CBFAS_AP      DBFAS_AP      AVRT_COL
+              ________      ________      ________      ________      ________
+ ABFAS_AP     264.936
+ BBFAS_AP     212.819       270.955
+ CBFAS_AP     189.717       207.582       249.024
+ DBFAS_AP     187.548       196.961       205.153       248.346
+ AVRT_COL     101.109        96.946        92.555        78.061       335.722
+ BVRT_COL     101.922       105.469       104.254        80.297       245.705
+ CVRT_COL      90.228        97.047        98.606        84.413       230.733
+ DVRT_COL      86.577        91.547        86.558        79.192       244.295
+
+
+           Covariances
+              BVRT_COL      CVRT_COL      DVRT_COL
+              ________      ________      ________
+ BVRT_COL     366.146
+ CVRT_COL     265.615       400.036
+ DVRT_COL     261.202       284.498       385.442
+
+
+           Correlations
+              ABFAS_AP      BBFAS_AP      CBFAS_AP      DBFAS_AP      AVRT_COL
+              ________      ________      ________      ________      ________
+ ABFAS_AP       1.000
+ BBFAS_AP       0.794         1.000
+ CBFAS_AP       0.739         0.799         1.000
+ DBFAS_AP       0.731         0.759         0.825         1.000
+ AVRT_COL       0.339         0.321         0.320         0.270         1.000
+ BVRT_COL       0.327         0.335         0.345         0.266         0.701
+ CVRT_COL       0.277         0.295         0.312         0.268         0.630
+ DVRT_COL       0.271         0.283         0.279         0.256         0.679
+
+
+           Correlations
+              BVRT_COL      CVRT_COL      DVRT_COL
+              ________      ________      ________
+ BVRT_COL       1.000
+ CVRT_COL       0.694         1.000
+ DVRT_COL       0.695         0.725         1.000
+
+
+     ESTIMATED SAMPLE STATISTICS FOR LATER
+
+
+           Means
+              ABFAS_AP      BBFAS_AP      CBFAS_AP      DBFAS_AP      AVRT_COL
+              ________      ________      ________      ________      ________
+               72.815        74.521        73.599        73.650        73.429
+
+
+           Means
+              BVRT_COL      CVRT_COL      DVRT_COL
+              ________      ________      ________
+               73.720        70.752        71.416
+
+
+           Covariances
+              ABFAS_AP      BBFAS_AP      CBFAS_AP      DBFAS_AP      AVRT_COL
+              ________      ________      ________      ________      ________
+ ABFAS_AP     249.352
+ BBFAS_AP     174.376       211.180
+ CBFAS_AP     190.853       170.789       228.748
+ DBFAS_AP     200.111       178.063       191.109       237.449
+ AVRT_COL      84.717        81.096        68.842        88.701       311.016
+ BVRT_COL      61.533        75.493        70.813        64.070       224.516
+ CVRT_COL      94.467        87.732        87.177        79.211       216.314
+ DVRT_COL      73.896        86.034        74.232        80.989       224.272
+
+
+           Covariances
+              BVRT_COL      CVRT_COL      DVRT_COL
+              ________      ________      ________
+ BVRT_COL     316.765
+ CVRT_COL     242.268       319.265
+ DVRT_COL     254.564       256.528       319.075
+
+
+           Correlations
+              ABFAS_AP      BBFAS_AP      CBFAS_AP      DBFAS_AP      AVRT_COL
+              ________      ________      ________      ________      ________
+ ABFAS_AP       1.000
+ BBFAS_AP       0.760         1.000
+ CBFAS_AP       0.799         0.777         1.000
+ DBFAS_AP       0.822         0.795         0.820         1.000
+ AVRT_COL       0.304         0.316         0.258         0.326         1.000
+ BVRT_COL       0.219         0.292         0.263         0.234         0.715
+ CVRT_COL       0.335         0.338         0.323         0.288         0.686
+ DVRT_COL       0.262         0.331         0.275         0.294         0.712
+
+
+           Correlations
+              BVRT_COL      CVRT_COL      DVRT_COL
+              ________      ________      ________
+ BVRT_COL       1.000
+ CVRT_COL       0.762         1.000
+ DVRT_COL       0.801         0.804         1.000
+
+
+     MAXIMUM LOG-LIKELIHOOD VALUE FOR THE UNRESTRICTED (H1) MODEL IS -20654.854
+
+
+UNIVARIATE SAMPLE STATISTICS
+
+
+     UNIVARIATE HIGHER-ORDER MOMENT DESCRIPTIVE STATISTICS FOR EARLIER
+
+         Variable/         Mean/     Skewness/   Minimum/ % with                Percentiles
+        Sample Size      Variance    Kurtosis    Maximum  Min/Max      20%/60%    40%/80%    Median
+
+     ABFAS_AP             67.922      -0.376       5.000    0.19%      55.000     65.000     67.500
+             532.000     265.539      -0.146     100.000    0.75%      75.000     82.500
+     BBFAS_AP             68.367      -0.266      20.000    0.25%      55.000     65.000     70.000
+             393.000     263.248      -0.562     100.000    1.02%      75.000     82.500
+     CBFAS_AP             68.770      -0.314      22.500    0.27%      55.000     65.000     70.000
+             376.000     247.867      -0.290     100.000    1.06%      75.000     82.500
+     DBFAS_AP             69.495      -0.322      30.000    0.27%      57.500     67.500     70.000
+             371.000     240.900      -0.444     100.000    0.27%      75.000     82.500
+     AVRT_COL             70.365      -0.613       6.250    0.19%      56.250     68.750     75.000
+             534.000     335.722       0.263     100.000    5.24%      75.000     87.500
+     BVRT_COL             67.756      -0.433      12.500    0.51%      50.000     62.500     68.750
+             390.000     365.043      -0.312     100.000    4.87%      75.000     87.500
+     CVRT_COL             66.845      -0.604       6.250    0.80%      50.000     62.500     68.750
+             374.000     400.574      -0.001     100.000    4.01%      75.000     81.250
+     DVRT_COL             67.015      -0.571       0.000    0.27%      50.000     62.500     68.750
+             371.000     393.616      -0.074     100.000    4.04%      75.000     81.250
+
+
+     UNIVARIATE HIGHER-ORDER MOMENT DESCRIPTIVE STATISTICS FOR LATER
+
+         Variable/         Mean/     Skewness/   Minimum/ % with                Percentiles
+        Sample Size      Variance    Kurtosis    Maximum  Min/Max      20%/60%    40%/80%    Median
+
+     ABFAS_AP             72.785      -0.719      15.000    0.61%      60.000     70.000     75.000
+             329.000     249.616       0.532     100.000    1.82%      80.000     85.000
+     BBFAS_AP             74.513      -0.598      30.000    0.43%      61.111     72.500     77.500
+             230.000     219.529      -0.119     100.000    2.17%      80.000     87.500
+     CBFAS_AP             73.867      -0.922      15.000    0.47%      62.500     72.500     76.250
+             214.000     237.063       0.995     100.000    1.40%      80.000     85.000
+     DBFAS_AP             73.677      -0.815      17.500    0.50%      62.500     72.500     75.000
+             199.000     234.025       0.693     100.000    1.51%      80.000     87.500
+     AVRT_COL             73.455      -0.579      12.500    0.30%      56.250     68.750     75.000
+             329.000     310.878      -0.032     100.000    7.29%      81.250     87.500
+     BVRT_COL             73.590      -0.551       6.250    0.44%      56.250     68.750     75.000
+             226.000     307.380       0.038     100.000    6.64%      81.250     87.500
+     CVRT_COL             70.755      -0.497       6.250    0.47%      56.250     68.750     75.000
+             212.000     318.431       0.139     100.000    6.13%      75.000     87.500
+     DVRT_COL             71.357      -0.585       6.250    0.50%      56.250     68.750     75.000
+             199.000     313.360       0.341     100.000    6.03%      75.000     87.500
+
+
+THE MODEL ESTIMATION TERMINATED NORMALLY
+
+
+
+MODEL FIT INFORMATION
+
+Number of Free Parameters                       34
+
+Loglikelihood
+
+          H0 Value                      -20708.174
+          H0 Scaling Correction Factor      1.2013
+            for MLR
+
+Information Criteria
+
+          Akaike (AIC)                   41484.347
+          Bayesian (BIC)                 41646.241
+          Sample-Size Adjusted BIC       41538.265
+            (n* = (n + 2) / 24)
+
+
+
+MODEL RESULTS
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+Group EARLIER
+
+ P1       BY
+    ABFAS_AP           1.000      0.000    999.000    999.000
+
+ P2       BY
+    BBFAS_AP           1.000      0.000    999.000    999.000
+
+ P3       BY
+    CBFAS_AP           1.000      0.000    999.000    999.000
+
+ P4       BY
+    DBFAS_AP           1.000      0.000    999.000    999.000
+
+ V1       BY
+    AVRT_COL           1.000      0.000    999.000    999.000
+
+ V2       BY
+    BVRT_COL           1.000      0.000    999.000    999.000
+
+ V3       BY
+    CVRT_COL           1.000      0.000    999.000    999.000
+
+ V4       BY
+    DVRT_COL           1.000      0.000    999.000    999.000
+
+ P4         ON
+    P3                 0.253      0.065      3.862      0.000
+    V3                 0.033      0.039      0.846      0.398
+
+ P3         ON
+    P2                 0.253      0.065      3.862      0.000
+    V2                 0.033      0.039      0.846      0.398
+
+ P2         ON
+    P1                 0.253      0.065      3.862      0.000
+    V1                 0.033      0.039      0.846      0.398
+
+ V4         ON
+    V3                 0.201      0.073      2.742      0.006
+    P3                 0.030      0.078      0.381      0.703
+
+ V3         ON
+    V2                 0.201      0.073      2.742      0.006
+    P2                 0.030      0.078      0.381      0.703
+
+ V2         ON
+    V1                 0.201      0.073      2.742      0.006
+    P1                 0.030      0.078      0.381      0.703
+
+ S_BFAS_A WITH
+    I_BFAS_AP         -0.258      0.566     -0.457      0.648
+    S_VRT_COL          0.074      0.086      0.859      0.390
+    I_VRT_COL         -1.155      1.906     -0.606      0.545
+
+ I_BFAS_A WITH
+    S_VRT_COL          0.438      1.863      0.235      0.814
+    I_VRT_COL         73.631     12.152      6.059      0.000
+
+ S_VRT_CO WITH
+    I_VRT_COL         -0.199      0.737     -0.271      0.787
+
+ P1       WITH
+    V1                10.979      7.053      1.557      0.120
+
+ P2       WITH
+    V2                 5.134      5.093      1.008      0.313
+
+ P3       WITH
+    V3                 5.134      5.093      1.008      0.313
+
+ P4       WITH
+    V4                 5.134      5.093      1.008      0.313
+
+ Means
+    P1                 0.000      0.000    999.000    999.000
+    V1                 0.000      0.000    999.000    999.000
+    I_BFAS_AP         70.200      0.514    136.627      0.000
+    S_BFAS_AP          0.265      0.045      5.929      0.000
+    I_VRT_COL         70.169      0.584    120.085      0.000
+    S_VRT_COL          0.147      0.053      2.770      0.006
+
+ Intercepts
+    ABFAS_AP           0.000      0.000    999.000    999.000
+    BBFAS_AP           0.000      0.000    999.000    999.000
+    CBFAS_AP           0.000      0.000    999.000    999.000
+    DBFAS_AP           0.000      0.000    999.000    999.000
+    AVRT_COL           0.000      0.000    999.000    999.000
+    BVRT_COL           0.000      0.000    999.000    999.000
+    CVRT_COL           0.000      0.000    999.000    999.000
+    DVRT_COL           0.000      0.000    999.000    999.000
+    P2                 0.000      0.000    999.000    999.000
+    P3                 0.000      0.000    999.000    999.000
+    P4                 0.000      0.000    999.000    999.000
+    V2                 0.000      0.000    999.000    999.000
+    V3                 0.000      0.000    999.000    999.000
+    V4                 0.000      0.000    999.000    999.000
+
+ Variances
+    P1                77.721      8.516      9.126      0.000
+    V1               117.007     12.599      9.287      0.000
+    I_BFAS_AP        176.558     13.258     13.317      0.000
+    S_BFAS_AP          0.083      0.099      0.838      0.402
+    I_VRT_COL        209.981     20.598     10.194      0.000
+    S_VRT_COL          0.185      0.149      1.238      0.216
+
+ Residual Variances
+    ABFAS_AP           0.000      0.000    999.000    999.000
+    BBFAS_AP           0.000      0.000    999.000    999.000
+    CBFAS_AP           0.000      0.000    999.000    999.000
+    DBFAS_AP           0.000      0.000    999.000    999.000
+    AVRT_COL           0.000      0.000    999.000    999.000
+    BVRT_COL           0.000      0.000    999.000    999.000
+    CVRT_COL           0.000      0.000    999.000    999.000
+    DVRT_COL           0.000      0.000    999.000    999.000
+    P2                61.572      5.214     11.808      0.000
+    P3                61.572      5.214     11.808      0.000
+    P4                61.572      5.214     11.808      0.000
+    V2               136.471     11.345     12.029      0.000
+    V3               136.471     11.345     12.029      0.000
+    V4               136.471     11.345     12.029      0.000
+
+Group LATER
+
+ P1       BY
+    ABFAS_AP           1.000      0.000    999.000    999.000
+
+ P2       BY
+    BBFAS_AP           1.000      0.000    999.000    999.000
+
+ P3       BY
+    CBFAS_AP           1.000      0.000    999.000    999.000
+
+ P4       BY
+    DBFAS_AP           1.000      0.000    999.000    999.000
+
+ V1       BY
+    AVRT_COL           1.000      0.000    999.000    999.000
+
+ V2       BY
+    BVRT_COL           1.000      0.000    999.000    999.000
+
+ V3       BY
+    CVRT_COL           1.000      0.000    999.000    999.000
+
+ V4       BY
+    DVRT_COL           1.000      0.000    999.000    999.000
+
+ P4         ON
+    P3                -0.102      0.072     -1.420      0.156
+    V3                -0.001      0.036     -0.041      0.968
+
+ P3         ON
+    P2                -0.102      0.072     -1.420      0.156
+    V2                -0.001      0.036     -0.041      0.968
+
+ P2         ON
+    P1                -0.102      0.072     -1.420      0.156
+    V1                -0.001      0.036     -0.041      0.968
+
+ V4         ON
+    V3                 0.051      0.066      0.772      0.440
+    P3                -0.142      0.073     -1.961      0.050
+
+ V3         ON
+    V2                 0.051      0.066      0.772      0.440
+    P2                -0.142      0.073     -1.961      0.050
+
+ V2         ON
+    V1                 0.051      0.066      0.772      0.440
+    P1                -0.142      0.073     -1.961      0.050
+
+ S_BFAS_A WITH
+    I_BFAS_AP         -0.258      0.566     -0.457      0.648
+    S_VRT_COL          0.074      0.086      0.859      0.390
+    I_VRT_COL         -1.155      1.906     -0.606      0.545
+
+ I_BFAS_A WITH
+    S_VRT_COL          0.438      1.863      0.235      0.814
+    I_VRT_COL         73.631     12.152      6.059      0.000
+
+ S_VRT_CO WITH
+    I_VRT_COL         -0.199      0.737     -0.271      0.787
+
+ P1       WITH
+    V1                 4.817      7.656      0.629      0.529
+
+ P2       WITH
+    V2                 2.182      2.941      0.742      0.458
+
+ P3       WITH
+    V3                 2.182      2.941      0.742      0.458
+
+ P4       WITH
+    V4                 2.182      2.941      0.742      0.458
+
+ Means
+    P1                 0.000      0.000    999.000    999.000
+    V1                 0.000      0.000    999.000    999.000
+    I_BFAS_AP         70.200      0.514    136.627      0.000
+    S_BFAS_AP          0.265      0.045      5.929      0.000
+    I_VRT_COL         70.169      0.584    120.085      0.000
+    S_VRT_COL          0.147      0.053      2.770      0.006
+
+ Intercepts
+    ABFAS_AP           0.000      0.000    999.000    999.000
+    BBFAS_AP           0.000      0.000    999.000    999.000
+    CBFAS_AP           0.000      0.000    999.000    999.000
+    DBFAS_AP           0.000      0.000    999.000    999.000
+    AVRT_COL           0.000      0.000    999.000    999.000
+    BVRT_COL           0.000      0.000    999.000    999.000
+    CVRT_COL           0.000      0.000    999.000    999.000
+    DVRT_COL           0.000      0.000    999.000    999.000
+    P2                 0.000      0.000    999.000    999.000
+    P3                 0.000      0.000    999.000    999.000
+    P4                 0.000      0.000    999.000    999.000
+    V2                 0.000      0.000    999.000    999.000
+    V3                 0.000      0.000    999.000    999.000
+    V4                 0.000      0.000    999.000    999.000
+
+ Variances
+    P1                56.045      7.675      7.302      0.000
+    V1               110.852     12.918      8.581      0.000
+    I_BFAS_AP        176.558     13.258     13.317      0.000
+    S_BFAS_AP          0.083      0.099      0.838      0.402
+    I_VRT_COL        209.981     20.598     10.194      0.000
+    S_VRT_COL          0.185      0.149      1.238      0.216
+
+ Residual Variances
+    ABFAS_AP           0.000      0.000    999.000    999.000
+    BBFAS_AP           0.000      0.000    999.000    999.000
+    CBFAS_AP           0.000      0.000    999.000    999.000
+    DBFAS_AP           0.000      0.000    999.000    999.000
+    AVRT_COL           0.000      0.000    999.000    999.000
+    BVRT_COL           0.000      0.000    999.000    999.000
+    CVRT_COL           0.000      0.000    999.000    999.000
+    DVRT_COL           0.000      0.000    999.000    999.000
+    P2                42.085      4.562      9.226      0.000
+    P3                42.085      4.562      9.226      0.000
+    P4                42.085      4.562      9.226      0.000
+    V2                73.616      7.387      9.966      0.000
+    V3                73.616      7.387      9.966      0.000
+    V4                73.616      7.387      9.966      0.000
+
+
+QUALITY OF NUMERICAL RESULTS
+
+     Condition Number for the Information Matrix              0.113E-04
+       (ratio of smallest to largest eigenvalue)
+
+
+     Beginning Time:  17:20:53
+        Ending Time:  17:21:12
+       Elapsed Time:  00:00:19
+
+
+
+MUTHEN & MUTHEN
+3463 Stoner Ave.
+Los Angeles, CA  90066
+
+Tel: (310) 391-9971
+Fax: (310) 391-8971
+Web: www.StatModel.com
+Support: Support@StatModel.com
+
+Copyright (c) 1998-2017 Muthen & Muthen
