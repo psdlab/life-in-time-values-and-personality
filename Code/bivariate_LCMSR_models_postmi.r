@@ -669,22 +669,63 @@ invariance_effect <- allParams_w_sampleLong %>%
   unite(key, stat, invariant) %>% 
   mutate(ScaleName = gsub('\\$_\\{inv\\}\\$', '', ScaleName)) %>%
   spread(key, value) %>%
-  filter(pval_noninv < .05) %>%
   rowwise() %>%
   mutate(est_diff = abs(as.numeric(est_inv) - as.numeric(est_noninv)),
          max_est = max(abs(c(as.numeric(est_inv), as.numeric(est_noninv)))),
          perc_diff = est_diff/max_est,
-         ScaleName = factor(ScaleName, levels = pVarNames)) %>%
+         ScaleName = factor(ScaleName, levels = pVarNames),
+         flip = sign(as.numeric(est_inv)) != sign(as.numeric(est_noninv))) %>%
   arrange(vVar, ScaleName, Group, dir) %>%
-  select(vVar, ScaleName, Group, dir, est_noninv, pval_noninv, est_inv, pval_inv, max_est, perc_diff, est_diff)
+  select(vVar, ScaleName, Group, dir, est_noninv, pval_noninv, est_inv, pval_inv, max_est, perc_diff, est_diff, flip)
   
-kable(filter(invariance_effect, pval_noninv < .005), caption = 'Significant Paths')
+kable(
+  dplyr::select(
+    filter(
+      arrange(
+        mutate(invariance_effect,
+               Group = factor(
+                 Group,
+                 levels = c('ALL',
+                            'EARLIER',
+                            'LATER',
+                            'D2',
+                            'D3',
+                            'D5')),
+               prop_diff = perc_diff),
+        vVar, ScaleName,Group), 
+      pval_noninv < .005,
+      vVar != 'aspfin'),
+    -max_est, -flip, -perc_diff),
+  caption = 'Significant Paths',
+  digits = 3)
 
 hist(filter(invariance_effect, pval_noninv < .005)$est_diff, main = 'Absolute difference for p<.005 paths')
 
 hist(filter(invariance_effect, pval_noninv < .005)$perc_diff, main = 'Percent difference for p<.005 paths')
 
-kable(filter(invariance_effect, pval_noninv < .05, pval_noninv >= .005), caption = 'Suggestive Paths')
+kable(
+  dplyr::select(
+    filter(
+      arrange(
+        mutate(invariance_effect,
+               Group = factor(
+                 Group,
+                 levels = c('ALL',
+                            'EARLIER',
+                            'LATER',
+                            'D2',
+                            'D3',
+                            'D4',
+                            'D5')),
+               prop_diff = perc_diff),
+        vVar, ScaleName,Group), 
+      pval_noninv < .05,
+      pval_noninv >= .005,
+      vVar != 'aspfin',
+      vVar != 'mvi'),
+    -max_est, -flip, -perc_diff),
+  caption = 'Suggestive Paths',
+  digits = 3)
 
 hist(filter(invariance_effect, pval_noninv < .05, pval_noninv >= .005)$est_diff, main = 'Absolute difference for .005 <= p <.05 paths')
 
@@ -700,3 +741,94 @@ sd_est_diff_p05 <- sd(filter(invariance_effect, pval_noninv < .05, pval_noninv >
 #' 
 #' For all .005 < p < .05 paths, mean absolute estimated differences were `r round(mean_est_diff_p05, 3)` (SD = `r round(sd_est_diff_p05, 3)`).
 #'
+#'
+
+
+filter(invariance_effect, pval_noninv < .005) %>%
+  group_by(Group) %>%
+  arrange(Group) %>%
+  mutate(est_noninv = as.numeric(est_noninv)) %>%
+  dplyr::summarize(mean = mean(est_diff, na.rm = T), 
+                   sd = sd(est_diff, na.rm = T),
+                   min = min(est_diff, na.rm = T),
+                   max = max(est_diff, na.rm = T),
+                   mean_est = mean(abs(est_noninv), na.rm = T), 
+                   sd_est = sd(abs(est_noninv), na.rm = T),
+                   min_est = min(abs(est_noninv), na.rm = T),
+                   max_est = max(abs(est_noninv), na.rm = T),
+                   mean_perc = mean(perc_diff, na.rm = T), 
+                   sd_perc = sd(perc_diff, na.rm = T),
+                   min_perc = min(perc_diff, na.rm = T),
+                   max_perc = max(perc_diff, na.rm = T)) %>% kable(digits = 4,
+                                                                   caption = 'p<.005')
+
+filter(invariance_effect, pval_noninv >= .005, pval_noninv < .05) %>%
+  group_by(Group) %>%
+  arrange(Group) %>%
+  mutate(est_noninv = as.numeric(est_noninv)) %>%
+  dplyr::summarize(mean = mean(est_diff, na.rm = T), 
+                   sd = sd(est_diff, na.rm = T),
+                   min = min(est_diff, na.rm = T),
+                   max = max(est_diff, na.rm = T),
+                   mean_est = mean(abs(est_noninv), na.rm = T), 
+                   sd_est = sd(abs(est_noninv), na.rm = T),
+                   min_est = min(abs(est_noninv), na.rm = T),
+                   max_est = max(abs(est_noninv), na.rm = T),
+                   mean_perc = mean(perc_diff, na.rm = T), 
+                   sd_perc = sd(perc_diff, na.rm = T),
+                   min_perc = min(perc_diff, na.rm = T),
+                   max_perc = max(perc_diff, na.rm = T)) %>% kable(digits = 4,
+                                                                   caption = '.005<=p<.05')
+
+filter(invariance_effect, pval_noninv < .05) %>%
+  group_by(Group) %>%
+  arrange(Group) %>%
+  mutate(est_noninv = as.numeric(est_noninv)) %>%
+  dplyr::summarize(mean = mean(est_diff, na.rm = T), 
+                   sd = sd(est_diff, na.rm = T),
+                   min = min(est_diff, na.rm = T),
+                   max = max(est_diff, na.rm = T),
+                   mean_est = mean(abs(est_noninv), na.rm = T), 
+                   sd_est = sd(abs(est_noninv), na.rm = T),
+                   min_est = min(abs(est_noninv), na.rm = T),
+                   max_est = max(abs(est_noninv), na.rm = T),
+                   mean_perc = mean(perc_diff, na.rm = T), 
+                   sd_perc = sd(perc_diff, na.rm = T),
+                   min_perc = min(perc_diff, na.rm = T),
+                   max_perc = max(perc_diff, na.rm = T)) %>% kable(digits = 4,
+                                                                   caption = 'p<.05')
+
+invariance_effect %>%
+  group_by(Group) %>%
+  arrange(Group) %>%
+  mutate(est_noninv = as.numeric(est_noninv)) %>%
+  dplyr::summarize(mean = mean(est_diff, na.rm = T), 
+                   sd = sd(est_diff, na.rm = T),
+                   min = min(est_diff, na.rm = T),
+                   max = max(est_diff, na.rm = T),
+                   mean_est = mean(abs(est_noninv), na.rm = T), 
+                   sd_est = sd(abs(est_noninv), na.rm = T),
+                   min_est = min(abs(est_noninv), na.rm = T),
+                   max_est = max(abs(est_noninv), na.rm = T),
+                   mean_perc = mean(perc_diff, na.rm = T), 
+                   sd_perc = sd(perc_diff, na.rm = T),
+                   min_perc = min(perc_diff, na.rm = T),
+                   max_perc = max(perc_diff, na.rm = T)) %>% kable(digits = 4,
+                                                                   caption = 'all coefs')
+
+invariance_effect %>%
+  filter(Group %in% c('ALL', 'EARLIER', 'LATER')) %>%
+  mutate(est_noninv = as.numeric(est_noninv)) %>%
+  dplyr::summarize(mean = mean(est_diff, na.rm = T), 
+                   sd = sd(est_diff, na.rm = T),
+                   min = min(est_diff, na.rm = T),
+                   max = max(est_diff, na.rm = T),
+                   mean_est = mean(abs(est_noninv), na.rm = T), 
+                   sd_est = sd(abs(est_noninv), na.rm = T),
+                   min_est = min(abs(est_noninv), na.rm = T),
+                   max_est = max(abs(est_noninv), na.rm = T),
+                   mean_perc = mean(perc_diff, na.rm = T), 
+                   sd_perc = sd(perc_diff, na.rm = T),
+                   min_perc = min(perc_diff, na.rm = T),
+                   max_perc = max(perc_diff, na.rm = T)) %>% kable(digits = 4,
+                                                                   caption = 'all main, under 40, over 40')
